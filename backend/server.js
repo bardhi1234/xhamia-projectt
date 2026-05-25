@@ -4,40 +4,31 @@ require("dotenv").config();
 
 const db = require("./config/db");
 
-// ================= ROUTES =================
 const investmentRoutes = require("./routes/investmentRoutes");
 const donorRoutes = require("./routes/donorRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 
 const app = express();
 
-// ================= ALLOWED ORIGINS =================
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://raportixhamis.netlify.app"
-];
-
-// ================= CORS (FIXED PRODUCTION) =================
+// ================= SIMPLE + SAFE CORS =================
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.log("❌ Blocked by CORS:", origin);
-      return callback(new Error("Not allowed by CORS"));
-    },
+    origin: [
+      "http://localhost:5173",
+      "https://raportixhamis.netlify.app",
+    ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
   })
 );
 
-// ================= HANDLE PREFLIGHT =================
-app.options("*", cors());
+// ================= HANDLE PREFLIGHT (SAFE) =================
+app.options(/.*/, (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "https://raportixhamis.netlify.app");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  return res.sendStatus(200);
+});
 
 // ================= MIDDLEWARE =================
 app.use(express.json());
@@ -48,32 +39,25 @@ app.use("/api/investments", investmentRoutes);
 app.use("/api/donors", donorRoutes);
 app.use("/api/reports", reportRoutes);
 
-// ================= HEALTH CHECK =================
+// ================= HEALTH =================
 app.get("/", (req, res) => {
-  res.json({
-    status: "OK",
-    message: "API Running..."
-  });
+  res.json({ status: "OK", message: "API Running..." });
 });
 
 // ================= DB CHECK =================
 db.query("SELECT NOW()")
-  .then(() => console.log("✅ Database Connected"))
-  .catch((err) => console.log("❌ DB ERROR:", err.message));
+  .then(() => console.log("Database Connected"))
+  .catch((err) => console.log("DB ERROR:", err.message));
 
 // ================= ERROR HANDLER =================
 app.use((err, req, res, next) => {
-  console.error("SERVER ERROR:", err);
-
-  res.status(500).json({
-    message: "Server Error",
-    error: err.message,
-  });
+  console.error(err);
+  res.status(500).json({ message: err.message });
 });
 
-// ================= START SERVER =================
+// ================= START =================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on ${PORT}`);
 });
