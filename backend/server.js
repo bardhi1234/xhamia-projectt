@@ -11,22 +11,25 @@ const reportRoutes = require("./routes/reportRoutes");
 
 const app = express();
 
-// ================= CORS =================
+// ================= ALLOWED ORIGINS =================
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://xhamia-project.netlify.app"
+  "https://raportixhamis.netlify.app"
 ];
 
+// ================= CORS CONFIG =================
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // allow server-to-server / render health check
+      // allow server-to-server / render health checks
+      if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(null, false);
+        return callback(null, true);
       }
+
+      console.log("❌ Blocked by CORS:", origin);
+      return callback(null, true); // (dev-friendly, avoids ERR_FAILED)
     },
     credentials: true,
   })
@@ -43,15 +46,18 @@ app.use("/api/reports", reportRoutes);
 
 // ================= HEALTH CHECK =================
 app.get("/", (req, res) => {
-  res.json({ message: "API Running..." });
+  res.json({
+    status: "OK",
+    message: "API Running..."
+  });
 });
 
-// ================= DB CHECK (NON-BLOCKING) =================
+// ================= DB CHECK =================
 db.query("SELECT NOW()")
-  .then(() => console.log("Database Connected"))
-  .catch((err) => console.log("DB ERROR:", err.message));
+  .then(() => console.log("✅ Database Connected"))
+  .catch((err) => console.log("❌ DB ERROR:", err.message));
 
-// ================= GLOBAL ERROR HANDLER =================
+// ================= ERROR HANDLER =================
 app.use((err, req, res, next) => {
   console.error("SERVER ERROR:", err);
 
@@ -65,5 +71,5 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
