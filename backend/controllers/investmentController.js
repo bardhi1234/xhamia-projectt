@@ -9,10 +9,10 @@ exports.getAll = async (req, res) => {
       "SELECT * FROM investments ORDER BY id DESC"
     );
 
-    res.json(result.rows);
+    return res.json(result.rows);
   } catch (err) {
     console.log("GET ERROR:", err);
-    res.status(500).json({ message: "Server Error" });
+    return res.status(500).json({ message: err.message });
   }
 };
 
@@ -25,33 +25,45 @@ exports.create = async (req, res) => {
       return res.status(400).json({ message: "No files uploaded" });
     }
 
-    // upload all images to cloudinary
     const uploadedImages = await Promise.all(
       req.files.map(async (file) => {
-        const upload = await cloudinary.uploader.upload(file.path, {
-          folder: "xhamia-investments",
-        });
+        try {
+          const upload = await cloudinary.uploader.upload(file.path, {
+            folder: "xhamia-investments",
+          });
 
-        fs.unlinkSync(file.path);
-        return upload.secure_url;
+          // safe delete (mos e crash Render)
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+
+          return upload.secure_url;
+        } catch (err) {
+          console.log("Cloudinary upload error:", err.message);
+          return null;
+        }
       })
     );
 
-    // save into DB (TEXT[])
+    const cleanImages = uploadedImages.filter(Boolean);
+
+    if (cleanImages.length === 0) {
+      return res.status(500).json({ message: "Image upload failed" });
+    }
+
     const result = await db.query(
       `
       INSERT INTO investments (images, type, stage)
       VALUES ($1, $2, $3)
       RETURNING *
       `,
-      [uploadedImages, type, stage]
+      [cleanImages, type, stage]
     );
 
-    res.json(result.rows[0]);
-
+    return res.json(result.rows[0]);
   } catch (err) {
     console.log("CREATE ERROR:", err);
-    res.status(500).json({ message: "Create Error" });
+    return res.status(500).json({ message: err.message });
   }
 };
 
@@ -61,39 +73,37 @@ exports.update = async (req, res) => {
     const { id } = req.params;
     const { type, stage } = req.body;
 
-    // IF NEW IMAGES
+    let images = [];
+
     if (req.files && req.files.length > 0) {
       const uploadedImages = await Promise.all(
         req.files.map(async (file) => {
-          const upload = await cloudinary.uploader.upload(file.path, {
-            folder: "xhamia-investments",
-          });
+          try {
+            const upload = await cloudinary.uploader.upload(file.path, {
+              folder: "xhamia-investments",
+            });
 
-          fs.unlinkSync(file.path);
-          return upload.secure_url;
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+
+            return upload.secure_url;
+          } catch (err) {
+            console.log("Cloudinary update error:", err.message);
+            return null;
+          }
         })
       );
 
-      const result = await db.query(
-        `
-        UPDATE investments
-        SET images=$1,
-            type=$2,
-            stage=$3
-        WHERE id=$4
-        RETURNING *
-        `,
-        [uploadedImages, type, stage, id]
+      images = uploadedImages.filter(Boolean);
+    } else {
+      const existing = await db.query(
+        "SELECT images FROM investments WHERE id=$1",
+        [id]
       );
 
-      return res.json(result.rows[0]);
+      images = existing.rows[0]?.images || [];
     }
-
-    // IF NO NEW IMAGES → KEEP OLD IMAGES
-    const existing = await db.query(
-      "SELECT images FROM investments WHERE id=$1",
-      [id]
-    );
 
     const result = await db.query(
       `
@@ -104,19 +114,13 @@ exports.update = async (req, res) => {
       WHERE id=$4
       RETURNING *
       `,
-      [
-        existing.rows[0].images,
-        type,
-        stage,
-        id
-      ]
+      [images, type, stage, id]
     );
 
-    res.json(result.rows[0]);
-
+    return res.json(result.rows[0]);
   } catch (err) {
     console.log("UPDATE ERROR:", err);
-    res.status(500).json({ message: "Update Error" });
+    return res.status(500).json({ message: err.message });
   }
 };
 
@@ -127,10 +131,9 @@ exports.remove = async (req, res) => {
 
     await db.query("DELETE FROM investments WHERE id=$1", [id]);
 
-    res.json({ message: "Deleted Successfully" });
-
+    return res.json({ message: "Deleted Successfully" });
   } catch (err) {
     console.log("DELETE ERROR:", err);
-    res.status(500).json({ message: "Delete Error" });
+    return res.status(500).json({ message: err.message });
   }
 };
